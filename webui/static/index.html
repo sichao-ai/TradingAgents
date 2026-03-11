@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TradingAgents 投研面板</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="bg-blur bg-blur-a"></div>
+  <div class="bg-blur bg-blur-b"></div>
+
+  <main class="page">
+    <div class="workspace">
+      <section class="content">
+        <section class="hero card">
+          <p class="kicker">TradingAgents</p>
+          <h1>基金经理投研面板</h1>
+          <p class="subtitle">输入股票代码，发起分析，并实时查看各团队进度与结论。</p>
+        </section>
+
+        <section class="controls card">
+          <form id="run-form" class="form-row">
+            <label>
+              <span>股票代码</span>
+              <input id="ticker" name="ticker" value="NVDA" maxlength="20" placeholder="例如 NVDA / 0700HK / 0700.HK" required />
+            </label>
+            <label>
+              <span>市场（可选）</span>
+              <select id="market" name="market">
+                <option value="AUTO" selected>自动识别</option>
+                <option value="US">美股 (US)</option>
+                <option value="HK">港股 (HK)</option>
+                <option value="CN">A股 (CN)</option>
+              </select>
+            </label>
+            <label>
+              <span>决策日期</span>
+              <input id="trade_date" name="trade_date" type="date" required />
+            </label>
+            <label class="full-row">
+              <span>研究资料 URL（可选，每行一个）</span>
+              <textarea id="research-urls" name="research_urls" rows="4" placeholder="https://seekingalpha.com/article/...\nhttps://seekingalpha.com/symbol/AAPL"></textarea>
+            </label>
+            <button id="run-btn" type="submit">开始分析</button>
+            <button id="probe-btn" type="button" class="secondary-alt">检测数据源</button>
+            <button id="cancel-btn" type="button" class="secondary" disabled>中断分析</button>
+          </form>
+          <p id="status" class="status">就绪。</p>
+          <a id="download-link" class="download-link" href="#" style="display:none;">下载本次 Markdown 报告</a>
+          <div class="runtime-grid">
+            <article class="runtime-card">
+              <h3>数据来源</h3>
+              <pre id="runtime-data">等待任务启动...</pre>
+            </article>
+            <article class="runtime-card">
+              <h3>模型配置</h3>
+              <pre id="runtime-model">等待任务启动...</pre>
+            </article>
+          </div>
+          <article class="runtime-card">
+            <h3>数据源检测结果</h3>
+            <pre id="source-probe">点击“检测数据源”查看各来源可用性与速度。</pre>
+          </article>
+        </section>
+
+        <section class="card panel">
+          <h2>实时进度</h2>
+          <ul id="timeline" class="timeline"></ul>
+        </section>
+
+        <section class="card panel">
+          <h2>研究模块（英中对照）</h2>
+          <div id="reports" class="reports">
+            <article id="section-final-decision" class="report-card module-card" data-field="final_decision">
+              <div class="report-head">
+                <h3>Final Decision</h3>
+                <span class="badge">等待生成</span>
+              </div>
+              <div id="decision-box" class="decision-box waiting">等待运行...</div>
+              <pre class="full-report" id="final-decision-meta">该模块正在等待生成...</pre>
+              <pre class="full-report" id="decision-trace">决策溯源将在任务完成后显示...</pre>
+            </article>
+
+            <article id="section-fundamentals-report" class="report-card module-card" data-field="fundamentals_report">
+              <div class="report-head">
+                <h3>Fundamentals Analysis</h3>
+                <span class="badge">等待生成</span>
+              </div>
+              <pre class="full-report">该模块正在等待生成...</pre>
+            </article>
+
+            <article id="section-market-report" class="report-card module-card" data-field="market_report">
+              <div class="report-head">
+                <h3>Market Analysis</h3>
+                <span class="badge">等待生成</span>
+              </div>
+              <pre class="full-report">该模块正在等待生成...</pre>
+            </article>
+
+            <article id="section-news-report" class="report-card module-card" data-field="news_report">
+              <div class="report-head">
+                <h3>News Analysis</h3>
+                <span class="badge">等待生成</span>
+              </div>
+              <pre class="full-report">该模块正在等待生成...</pre>
+            </article>
+
+            <article id="section-bull-debate-report" class="report-card module-card" data-field="bull_debate_report">
+              <div class="report-head">
+                <h3>Bull Debate Report</h3>
+                <span class="badge">等待生成</span>
+              </div>
+              <pre class="full-report">该模块正在等待生成...</pre>
+            </article>
+
+            <article id="section-bear-debate-report" class="report-card module-card" data-field="bear_debate_report">
+              <div class="report-head">
+                <h3>Bear Debate Report</h3>
+                <span class="badge">等待生成</span>
+              </div>
+              <pre class="full-report">该模块正在等待生成...</pre>
+            </article>
+
+            <article id="section-investment-plan" class="report-card module-card" data-field="investment_plan">
+              <div class="report-head">
+                <h3>Research Team Decision</h3>
+                <span class="badge">等待生成</span>
+              </div>
+              <pre class="full-report">该模块正在等待生成...</pre>
+            </article>
+
+            <article id="section-final-trade-decision" class="report-card module-card" data-field="final_trade_decision">
+              <div class="report-head">
+                <h3>Risk Team Final Report</h3>
+                <span class="badge">等待生成</span>
+              </div>
+              <pre class="full-report" id="final-report">该模块正在等待生成...</pre>
+            </article>
+
+            <article id="section-sentiment-report" class="report-card module-card" data-field="sentiment_report">
+              <div class="report-head">
+                <h3>Social Sentiment</h3>
+                <span class="badge">等待生成</span>
+              </div>
+              <pre class="full-report">该模块正在等待生成...</pre>
+            </article>
+
+            <article id="section-trader-investment-plan" class="report-card module-card" data-field="trader_investment_plan">
+              <div class="report-head">
+                <h3>Trader Plan</h3>
+                <span class="badge">等待生成</span>
+              </div>
+              <pre class="full-report">该模块正在等待生成...</pre>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <aside class="sidebar card">
+        <h2>目录与进度</h2>
+        <nav id="toc" class="toc">
+          <a class="toc-item" data-target="section-final-decision" data-field="final_decision" href="#section-final-decision"><span>Final Decision</span><em>等待</em></a>
+          <a class="toc-item" data-target="section-fundamentals-report" data-field="fundamentals_report" href="#section-fundamentals-report"><span>Fundamentals Analysis</span><em>等待</em></a>
+          <a class="toc-item" data-target="section-market-report" data-field="market_report" href="#section-market-report"><span>Market Analysis</span><em>等待</em></a>
+          <a class="toc-item" data-target="section-news-report" data-field="news_report" href="#section-news-report"><span>News Analysis</span><em>等待</em></a>
+          <a class="toc-item" data-target="section-bull-debate-report" data-field="bull_debate_report" href="#section-bull-debate-report"><span>Bull Debate Report</span><em>等待</em></a>
+          <a class="toc-item" data-target="section-bear-debate-report" data-field="bear_debate_report" href="#section-bear-debate-report"><span>Bear Debate Report</span><em>等待</em></a>
+          <a class="toc-item" data-target="section-investment-plan" data-field="investment_plan" href="#section-investment-plan"><span>Research Team Decision</span><em>等待</em></a>
+          <a class="toc-item" data-target="section-final-trade-decision" data-field="final_trade_decision" href="#section-final-trade-decision"><span>Risk Team Final Report</span><em>等待</em></a>
+          <a class="toc-item" data-target="section-sentiment-report" data-field="sentiment_report" href="#section-sentiment-report"><span>Social Sentiment</span><em>等待</em></a>
+          <a class="toc-item" data-target="section-trader-investment-plan" data-field="trader_investment_plan" href="#section-trader-investment-plan"><span>Trader Plan</span><em>等待</em></a>
+        </nav>
+      </aside>
+    </div>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

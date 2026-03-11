@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 from .alpha_vantage_common import _make_api_request, _filter_csv_by_date_range
 
 def get_stock(
@@ -34,5 +35,16 @@ def get_stock(
     }
 
     response = _make_api_request("TIME_SERIES_DAILY_ADJUSTED", params)
+
+    # Some Alpha Vantage keys/plans do not allow ADJUSTED endpoint.
+    # Fallback to free TIME_SERIES_DAILY when premium endpoint is blocked.
+    try:
+        payload = json.loads(response)
+        info = str(payload.get("Information", ""))
+        if "premium endpoint" in info.lower():
+            response = _make_api_request("TIME_SERIES_DAILY", params)
+    except json.JSONDecodeError:
+        # Normal CSV response
+        pass
 
     return _filter_csv_by_date_range(response, start_date, end_date)

@@ -1,4 +1,4 @@
-from .alpha_vantage_common import _make_api_request
+from .alpha_vantage_common import _make_api_request, AlphaVantageRateLimitError
 
 def get_indicator(
     symbol: str,
@@ -217,6 +217,9 @@ def get_indicator(
 
         return result_str
 
+    except AlphaVantageRateLimitError:
+        # Re-raise so interface router can fallback to yfinance.
+        raise
     except Exception as e:
         print(f"Error getting Alpha Vantage indicator data for {indicator}: {e}")
         return f"Error retrieving {indicator} data: {str(e)}"

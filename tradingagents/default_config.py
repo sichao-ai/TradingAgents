@@ -25,10 +25,14 @@ DEFAULT_CONFIG = {
         "core_stock_apis": "yfinance",       # Options: alpha_vantage, yfinance
         "technical_indicators": "yfinance",  # Options: alpha_vantage, yfinance
         "fundamental_data": "yfinance",      # Options: alpha_vantage, yfinance
-        "news_data": "yfinance",             # Options: alpha_vantage, yfinance
+        "news_data": "seeking_alpha,yfinance,alpha_vantage",  # Options: seeking_alpha, alpha_vantage, yfinance
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {
         # Example: "get_stock_data": "alpha_vantage",  # Override category default
     },
+    # Optional run-time research materials supplied by user input
+    "research_material_urls": [],
+    # Optional mapping for Seeking Alpha symbol feed lookup, e.g. {"0700.HK": "TCEHY"}
+    "seeking_alpha_symbol_overrides": {},
 }

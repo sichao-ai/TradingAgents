@@ -4,6 +4,18 @@ from dateutil.relativedelta import relativedelta
 import yfinance as yf
 import os
 from .stockstats_utils import StockstatsUtils
+from .local_csv import load_local_ohlcv
+
+
+def _is_yfinance_rate_limit_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    name = exc.__class__.__name__.lower()
+    return (
+        "yfratelimiterror" in name
+        or "too many requests" in message
+        or "rate limit" in message
+    )
+
 
 def get_YFin_data_online(
     symbol: Annotated[str, "ticker symbol of the company"],
@@ -18,12 +30,19 @@ def get_YFin_data_online(
     ticker = yf.Ticker(symbol.upper())
 
     # Fetch historical data for the specified date range
-    data = ticker.history(start=start_date, end=end_date)
+    try:
+        data = ticker.history(start=start_date, end=end_date)
+    except Exception as e:
+        if _is_yfinance_rate_limit_error(e):
+            raise RuntimeError(
+                f"yfinance rate limit exceeded for {symbol}: {e}"
+            ) from e
+        raise RuntimeError(f"yfinance fetch failed for {symbol}: {e}") from e
 
     # Check if data is empty
     if data.empty:
-        return (
-            f"No data found for symbol '{symbol}' between {start_date} and {end_date}"
+        raise RuntimeError(
+            f"yfinance returned empty data for symbol '{symbol}' between {start_date} and {end_date}"
         )
 
     # Remove timezone info from index for cleaner output
@@ -53,6 +72,7 @@ def get_stock_stats_indicators_window(
         str, "The current trading date you are trading on, YYYY-mm-dd"
     ],
     look_back_days: Annotated[int, "how many days to look back"],
+    data_source: Annotated[str, "force data source: yfinance or local"] = "yfinance",
 ) -> str:
 
     best_ind_params = {
@@ -139,7 +159,9 @@ def get_stock_stats_indicators_window(
 
     # Optimized: Get stock data once and calculate indicators for all dates
     try:
-        indicator_data = _get_stock_stats_bulk(symbol, indicator, curr_date)
+        indicator_data = _get_stock_stats_bulk(
+            symbol, indicator, curr_date, data_source=data_source
+        )
         
         # Generate the date range we need
         current_dt = curr_date_dt
@@ -163,16 +185,9 @@ def get_stock_stats_indicators_window(
             ind_string += f"{date_str}: {value}\n"
         
     except Exception as e:
-        print(f"Error getting bulk stockstats data: {e}")
-        # Fallback to original implementation if bulk method fails
-        ind_string = ""
-        curr_date_dt = datetime.strptime(curr_date, "%Y-%m-%d")
-        while curr_date_dt >= before:
-            indicator_value = get_stockstats_indicator(
-                symbol, indicator, curr_date_dt.strftime("%Y-%m-%d")
-            )
-            ind_string += f"{curr_date_dt.strftime('%Y-%m-%d')}: {indicator_value}\n"
-            curr_date_dt = curr_date_dt - relativedelta(days=1)
+        raise RuntimeError(
+            f"Failed to compute indicator '{indicator}' for {symbol} via {data_source}: {e}"
+        ) from e
 
     result_str = (
         f"## {indicator} values from {before.strftime('%Y-%m-%d')} to {end_date}:\n\n"
@@ -187,7 +202,8 @@ def get_stock_stats_indicators_window(
 def _get_stock_stats_bulk(
     symbol: Annotated[str, "ticker symbol of the company"],
     indicator: Annotated[str, "technical indicator to calculate"],
-    curr_date: Annotated[str, "current date for reference"]
+    curr_date: Annotated[str, "current date for reference"],
+    data_source: Annotated[str, "data source for indicator calc: yfinance or local"] = "yfinance",
 ) -> dict:
     """
     Optimized bulk calculation of stock stats indicators.
@@ -200,20 +216,15 @@ def _get_stock_stats_bulk(
     import os
     
     config = get_config()
-    online = config["data_vendors"]["technical_indicators"] != "local"
+    online = data_source != "local"
     
     if not online:
-        # Local data path
+        # Local CSV path (for Wind-exported data)
         try:
-            data = pd.read_csv(
-                os.path.join(
-                    config.get("data_cache_dir", "data"),
-                    f"{symbol}-YFin-data-2015-01-01-2025-03-25.csv",
-                )
-            )
+            data = load_local_ohlcv(symbol)
             df = wrap(data)
-        except FileNotFoundError:
-            raise Exception("Stockstats fail: Yahoo Finance data not fetched yet!")
+        except Exception as e:
+            raise Exception(f"Local stock data unavailable for {symbol}: {e}")
     else:
         # Online data fetching with caching
         today_date = pd.Timestamp.today()
@@ -235,19 +246,33 @@ def _get_stock_stats_bulk(
             data = pd.read_csv(data_file)
             data["Date"] = pd.to_datetime(data["Date"])
         else:
-            data = yf.download(
-                symbol,
-                start=start_date_str,
-                end=end_date_str,
-                multi_level_index=False,
-                progress=False,
-                auto_adjust=True,
-            )
+            try:
+                data = yf.download(
+                    symbol,
+                    start=start_date_str,
+                    end=end_date_str,
+                    multi_level_index=False,
+                    progress=False,
+                    auto_adjust=True,
+                )
+            except Exception as e:
+                if _is_yfinance_rate_limit_error(e):
+                    raise RuntimeError(
+                        f"yfinance rate limit exceeded while fetching indicators for {symbol}: {e}"
+                    ) from e
+                raise RuntimeError(
+                    f"yfinance indicator fetch failed for {symbol}: {e}"
+                ) from e
+            if data is None or data.empty:
+                raise RuntimeError(
+                    f"yfinance returned empty indicator dataset for {symbol}"
+                )
             data = data.reset_index()
             data.to_csv(data_file, index=False)
-        
+
         df = wrap(data)
-        df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    df = df.dropna(subset=["Date"])
     
     # Calculate the indicator for all rows at once
     df[indicator]  # This triggers stockstats to calculate the indicator

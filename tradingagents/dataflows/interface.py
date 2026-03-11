@@ -1,4 +1,5 @@
 from typing import Annotated
+from functools import partial
 
 # Import from vendor-specific modules
 from .y_finance import (
@@ -10,7 +11,10 @@ from .y_finance import (
     get_income_statement as get_yfinance_income_statement,
     get_insider_transactions as get_yfinance_insider_transactions,
 )
+from .local_csv import get_stock_data_local
+from .stooq import get_stock_data_stooq
 from .yfinance_news import get_news_yfinance, get_global_news_yfinance
+from .seeking_alpha_rss import get_news_seeking_alpha, get_global_news_seeking_alpha
 from .alpha_vantage import (
     get_stock as get_alpha_vantage_stock,
     get_indicator as get_alpha_vantage_indicator,
@@ -61,21 +65,27 @@ TOOLS_CATEGORIES = {
 }
 
 VENDOR_LIST = [
+    "stooq",
+    "seeking_alpha",
     "yfinance",
     "alpha_vantage",
+    "local",
 ]
 
 # Mapping of methods to their vendor-specific implementations
 VENDOR_METHODS = {
     # core_stock_apis
     "get_stock_data": {
+        "stooq": get_stock_data_stooq,
         "alpha_vantage": get_alpha_vantage_stock,
         "yfinance": get_YFin_data_online,
+        "local": get_stock_data_local,
     },
     # technical_indicators
     "get_indicators": {
         "alpha_vantage": get_alpha_vantage_indicator,
-        "yfinance": get_stock_stats_indicators_window,
+        "yfinance": partial(get_stock_stats_indicators_window, data_source="yfinance"),
+        "local": partial(get_stock_stats_indicators_window, data_source="local"),
     },
     # fundamental_data
     "get_fundamentals": {
@@ -96,10 +106,12 @@ VENDOR_METHODS = {
     },
     # news_data
     "get_news": {
+        "seeking_alpha": get_news_seeking_alpha,
         "alpha_vantage": get_alpha_vantage_news,
         "yfinance": get_news_yfinance,
     },
     "get_global_news": {
+        "seeking_alpha": get_global_news_seeking_alpha,
         "yfinance": get_global_news_yfinance,
         "alpha_vantage": get_alpha_vantage_global_news,
     },
@@ -147,6 +159,7 @@ def route_to_vendor(method: str, *args, **kwargs):
         if vendor not in fallback_vendors:
             fallback_vendors.append(vendor)
 
+    last_exception: Exception | None = None
     for vendor in fallback_vendors:
         if vendor not in VENDOR_METHODS[method]:
             continue
@@ -158,5 +171,14 @@ def route_to_vendor(method: str, *args, **kwargs):
             return impl_func(*args, **kwargs)
         except AlphaVantageRateLimitError:
             continue  # Only rate limits trigger fallback
+        except Exception as e:
+            # Mixed strategy fallback: if the current vendor fails,
+            # try the next available vendor in the chain.
+            last_exception = e
+            continue
 
+    if last_exception:
+        raise RuntimeError(
+            f"No available vendor for '{method}'. Last error: {last_exception}"
+        )
     raise RuntimeError(f"No available vendor for '{method}'")

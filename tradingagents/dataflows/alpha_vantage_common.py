@@ -99,6 +99,11 @@ def _filter_csv_by_date_range(csv_data: str, start_date: str, end_date: str) -> 
     if not csv_data or csv_data.strip() == "":
         return csv_data
 
+    # Avoid parsing JSON error payloads as CSV.
+    text = csv_data.strip()
+    if text.startswith("{"):
+        return csv_data
+
     try:
         # Parse CSV data
         df = pd.read_csv(StringIO(csv_data))
