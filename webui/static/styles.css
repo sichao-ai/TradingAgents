@@ -210,6 +210,93 @@ button:disabled {
   line-height: 1.45;
 }
 
+.evidence-card {
+  margin-top: 10px;
+}
+
+.evidence-state {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #27453f;
+}
+
+.evidence-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.evidence-upload {
+  display: grid;
+  gap: 4px;
+  min-width: 260px;
+}
+
+.evidence-upload span {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #3b635b;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.evidence-upload input[type="file"] {
+  font-size: 12px;
+}
+
+.evidence-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.evidence-item {
+  border: 1px solid #d6dfd8;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px;
+}
+
+.evidence-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.evidence-item-title {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #1f3f3a;
+}
+
+.evidence-item-meta {
+  font-size: 11px;
+  color: #4b6760;
+  margin-bottom: 6px;
+}
+
+.evidence-item-summary {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #2b4843;
+  white-space: pre-wrap;
+}
+
+.evidence-item-url {
+  margin-top: 6px;
+  word-break: break-all;
+  font-size: 11px;
+}
+
 h2 {
   margin: 0 0 10px;
   font-size: 20px;

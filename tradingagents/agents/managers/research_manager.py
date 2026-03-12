@@ -20,6 +20,11 @@ def create_research_manager(llm, memory):
             past_memory_str += rec["recommendation"] + "\n\n"
 
         prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive decision: align with the bear analyst, the bull analyst, or choose Hold only if it is strongly justified based on the arguments presented.
+Evidence governance requirements:
+- Treat [SAx] / Seeking Alpha citations as opinion-layer evidence.
+- Do not rely on opinion-layer evidence alone for final decisive recommendation.
+- Any decisive recommendation must mention at least one fact-layer basis (market data / fundamentals / financial statements).
+- Preserve citation tags when quoting arguments and provide a References section when URLs are available.
 
 Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your recommendation—Buy, Sell, or Hold—must be clear and actionable. Avoid defaulting to Hold simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments.
 

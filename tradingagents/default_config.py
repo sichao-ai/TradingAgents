@@ -35,4 +35,7 @@ DEFAULT_CONFIG = {
     "research_material_urls": [],
     # Optional mapping for Seeking Alpha symbol feed lookup, e.g. {"0700.HK": "TCEHY"}
     "seeking_alpha_symbol_overrides": {},
+    # Seeking Alpha coverage threshold (for fallback to next vendor)
+    "seeking_alpha_min_items": 2,
+    "seeking_alpha_strict_coverage": True,
 }

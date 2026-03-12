@@ -1,6 +1,7 @@
 from langchain_core.messages import AIMessage
 import time
 import json
+from tradingagents.agents.researchers.sa_claims import build_sa_claim_brief
 
 
 def create_bear_researcher(llm, memory):
@@ -14,6 +15,7 @@ def create_bear_researcher(llm, memory):
         sentiment_report = state["sentiment_report"]
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
+        sa_claim_brief = build_sa_claim_brief(news_report, role="bear")
 
         curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
         past_memories = memory.get_memories(curr_situation, n_matches=2)
@@ -23,6 +25,10 @@ def create_bear_researcher(llm, memory):
             past_memory_str += rec["recommendation"] + "\n\n"
 
         prompt = f"""You are a Bear Analyst making the case against investing in the stock. Your goal is to present a well-reasoned argument emphasizing risks, challenges, and negative indicators. Leverage the provided research and data to highlight potential downsides and counter bullish arguments effectively.
+Evidence policy:
+- Treat Seeking Alpha claims as OPINION evidence, not standalone facts.
+- Any decisive argument must include at least one FACT evidence from market or fundamentals data.
+- Keep citation tags like [SA1], [SA2] whenever you reference those claims.
 
 Key points to focus on:
 
@@ -38,10 +44,13 @@ Market research report: {market_research_report}
 Social media sentiment report: {sentiment_report}
 Latest world affairs news: {news_report}
 Company fundamentals report: {fundamentals_report}
+Structured Seeking Alpha claims: {sa_claim_brief}
 Conversation history of the debate: {history}
 Last bull argument: {current_response}
 Reflections from similar situations and lessons learned: {past_memory_str}
-Use this information to deliver a compelling bear argument, refute the bull's claims, and engage in a dynamic debate that demonstrates the risks and weaknesses of investing in the stock. You must also address reflections and learn from lessons and mistakes you made in the past.
+Use this information to deliver a compelling bear argument, refute the bull's claims, and engage in a dynamic debate that demonstrates the risks and weaknesses of investing in the stock.
+At the end, add a short "References" line with URLs for the cited [SAx] tags if available.
+You must also address reflections and learn from lessons and mistakes you made in the past.
 """
 
         response = llm.invoke(prompt)

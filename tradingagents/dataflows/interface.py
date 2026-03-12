@@ -15,6 +15,7 @@ from .local_csv import get_stock_data_local
 from .stooq import get_stock_data_stooq
 from .yfinance_news import get_news_yfinance, get_global_news_yfinance
 from .seeking_alpha_rss import get_news_seeking_alpha, get_global_news_seeking_alpha
+from .prepared_pack import get_news_from_pack, get_global_news_from_pack
 from .alpha_vantage import (
     get_stock as get_alpha_vantage_stock,
     get_indicator as get_alpha_vantage_indicator,
@@ -65,6 +66,7 @@ TOOLS_CATEGORIES = {
 }
 
 VENDOR_LIST = [
+    "prepared_pack",
     "stooq",
     "seeking_alpha",
     "yfinance",
@@ -106,11 +108,13 @@ VENDOR_METHODS = {
     },
     # news_data
     "get_news": {
+        "prepared_pack": get_news_from_pack,
         "seeking_alpha": get_news_seeking_alpha,
         "alpha_vantage": get_alpha_vantage_news,
         "yfinance": get_news_yfinance,
     },
     "get_global_news": {
+        "prepared_pack": get_global_news_from_pack,
         "seeking_alpha": get_global_news_seeking_alpha,
         "yfinance": get_global_news_yfinance,
         "alpha_vantage": get_alpha_vantage_global_news,

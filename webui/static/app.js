@@ -3,9 +3,19 @@ const tickerInput = document.getElementById("ticker");
 const marketInput = document.getElementById("market");
 const dateInput = document.getElementById("trade_date");
 const researchUrlsInput = document.getElementById("research-urls");
+const prepareBtn = document.getElementById("prepare-btn");
+const confirmEvidenceBtn = document.getElementById("confirm-evidence-btn");
 const runBtn = document.getElementById("run-btn");
 const probeBtn = document.getElementById("probe-btn");
 const cancelBtn = document.getElementById("cancel-btn");
+const uploadEvidenceBtn = document.getElementById("upload-evidence-btn");
+const addEvidenceUrlsBtn = document.getElementById("add-evidence-urls-btn");
+const evidenceFileInput = document.getElementById("evidence-file");
+const evidenceExtraUrlsInput = document.getElementById("evidence-extra-urls");
+const evidenceStateEl = document.getElementById("evidence-state");
+const evidenceSummaryEl = document.getElementById("evidence-summary");
+const evidenceListEl = document.getElementById("evidence-list");
+
 const statusEl = document.getElementById("status");
 const timelineEl = document.getElementById("timeline");
 const decisionBox = document.getElementById("decision-box");
@@ -22,6 +32,9 @@ dateInput.value = dateInput.value || today;
 
 let eventSource = null;
 let currentRunId = null;
+let currentEvidencePack = null;
+let evidencePackSignature = "";
+
 const completedReports = new Set();
 const moduleContent = new Map();
 
@@ -73,6 +86,34 @@ function addTimeline(message) {
 
 function setStatus(text) {
   statusEl.textContent = text;
+}
+
+function parseUrls(text) {
+  const seen = new Set();
+  return (text || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => (line.startsWith("http://") || line.startsWith("https://")) && !seen.has(line) && seen.add(line));
+}
+
+function currentRequestSignature() {
+  const ticker = tickerInput.value.trim().toUpperCase();
+  const market = (marketInput?.value || "AUTO").toUpperCase();
+  const tradeDate = dateInput.value;
+  return `${ticker}|${market}|${tradeDate}`;
+}
+
+function setControlStates() {
+  const hasPack = Boolean(currentEvidencePack);
+  const confirmed = Boolean(currentEvidencePack?.confirmed);
+  const running = Boolean(currentRunId);
+
+  if (prepareBtn) prepareBtn.disabled = running;
+  if (confirmEvidenceBtn) confirmEvidenceBtn.disabled = running || !hasPack || confirmed;
+  if (runBtn) runBtn.disabled = running || !hasPack || !confirmed;
+  if (uploadEvidenceBtn) uploadEvidenceBtn.disabled = running || !hasPack;
+  if (addEvidenceUrlsBtn) addEvidenceUrlsBtn.disabled = running || !hasPack;
+  if (cancelBtn) cancelBtn.disabled = !running;
 }
 
 function setModuleState(field, stateText, isDone = false) {
@@ -158,41 +199,206 @@ function resetUI() {
   runtimeModelEl.textContent = "等待任务启动...";
 }
 
-async function createRun(payload) {
-  const response = await fetch("/api/runs", {
+function resetEvidenceUI() {
+  currentEvidencePack = null;
+  evidencePackSignature = "";
+  if (evidenceStateEl) evidenceStateEl.textContent = "尚未准备证据包。";
+  if (evidenceSummaryEl) evidenceSummaryEl.textContent = "准备完成后会显示来源分层、事件类型统计与可选条目。";
+  if (evidenceListEl) evidenceListEl.innerHTML = "";
+  setControlStates();
+}
+
+async function postJson(url, payload) {
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`启动任务失败: ${text}`);
+    throw new Error(text || `请求失败: ${response.status}`);
   }
   return response.json();
 }
 
+async function createRun(payload) {
+  return postJson("/api/runs", payload);
+}
+
 async function probeSources(payload) {
-  const response = await fetch("/api/data-sources/probe", {
+  return postJson("/api/data-sources/probe", payload);
+}
+
+async function prepareEvidence(payload) {
+  return postJson("/api/evidence/prepare", payload);
+}
+
+async function confirmEvidence(packId) {
+  return postJson(`/api/evidence/${packId}/confirm`, {});
+}
+
+async function addEvidenceUrls(packId, urls) {
+  return postJson(`/api/evidence/${packId}/urls`, { urls });
+}
+
+async function updateEvidenceSelection(packId, selectedIds) {
+  return postJson(`/api/evidence/${packId}/selection`, { selected_cite_ids: selectedIds });
+}
+
+async function uploadEvidenceFile(packId, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`/api/evidence/${packId}/files`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: formData,
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`检测失败: ${text}`);
+    throw new Error(text || `上传失败: ${response.status}`);
+  }
+  return response.json();
+}
+
+async function fetchEvidence(packId) {
+  const response = await fetch(`/api/evidence/${packId}`);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `证据包获取失败: ${response.status}`);
   }
   return response.json();
 }
 
 async function cancelRun(runId) {
-  const response = await fetch(`/api/runs/${runId}/cancel`, {
-    method: "POST",
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`取消失败: ${text}`);
+  return postJson(`/api/runs/${runId}/cancel`, {});
+}
+
+function collectSelectedEvidenceIds() {
+  return Array.from(document.querySelectorAll(".evidence-select:checked")).map((el) => el.dataset.citeId);
+}
+
+function updateEvidenceSummaryView(pack) {
+  const summary = pack?.summary || {};
+  const byLayer = summary.by_layer || {};
+  const selectedByLayer = summary.selected_by_layer || {};
+  const byEvent = summary.by_event_type || {};
+  const bySource = summary.by_source || {};
+
+  const lines = [
+    `Pack ID: ${pack?.pack_id || "-"}`,
+    `状态: ${pack?.confirmed ? "已确认" : "未确认"}`,
+    `Ticker: ${pack?.ticker || "-"}`,
+    `Trade Date: ${pack?.trade_date || "-"}`,
+    `资料总数: ${summary.total_items ?? 0}`,
+    `已勾选: ${summary.selected_items ?? 0}`,
+    "",
+    "分层统计 (全部):",
+  ];
+
+  Object.entries(byLayer).forEach(([k, v]) => lines.push(`- ${k}: ${v}`));
+  lines.push("", "分层统计 (已勾选):");
+  Object.entries(selectedByLayer).forEach(([k, v]) => lines.push(`- ${k}: ${v}`));
+  lines.push("", "事件类型:");
+  Object.entries(byEvent).forEach(([k, v]) => lines.push(`- ${k}: ${v}`));
+  lines.push("", "来源:");
+  Object.entries(bySource).forEach(([k, v]) => lines.push(`- ${k}: ${v}`));
+
+  if (pack?.fetch_errors?.length) {
+    lines.push("", "抓取告警:");
+    pack.fetch_errors.forEach((e) => lines.push(`- ${e}`));
   }
-  return response.json();
+
+  evidenceSummaryEl.textContent = lines.join("\n");
+}
+
+function renderEvidenceList(pack) {
+  const items = pack?.items || [];
+  evidenceListEl.innerHTML = "";
+
+  if (!items.length) {
+    evidenceListEl.textContent = "暂无可用资料。";
+    return;
+  }
+
+  for (const item of items) {
+    const wrapper = document.createElement("article");
+    wrapper.className = "evidence-item";
+
+    const head = document.createElement("div");
+    head.className = "evidence-item-head";
+
+    const title = document.createElement("div");
+    title.className = "evidence-item-title";
+    const citeId = item.cite_id || "E";
+    title.textContent = `[${citeId}] ${item.title || "Untitled"}`;
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "evidence-select";
+    checkbox.dataset.citeId = citeId;
+    checkbox.checked = item.selected !== false;
+
+    checkbox.addEventListener("change", async () => {
+      if (!currentEvidencePack) return;
+      const selectedIds = collectSelectedEvidenceIds();
+      try {
+        await updateEvidenceSelection(currentEvidencePack.pack_id, selectedIds);
+        const refreshed = await fetchEvidence(currentEvidencePack.pack_id);
+        applyEvidencePack(refreshed, false);
+        setStatus("证据勾选已更新（已解除确认，请重新确认资料）。");
+      } catch (err) {
+        addTimeline(`更新证据勾选失败: ${String(err)}`);
+        setStatus("更新证据勾选失败。");
+      }
+    });
+
+    head.appendChild(title);
+    head.appendChild(checkbox);
+    wrapper.appendChild(head);
+
+    const meta = document.createElement("div");
+    meta.className = "evidence-item-meta";
+    meta.textContent = `layer=${item.layer || "unknown"} | source=${item.source || "unknown"} | event=${item.event_type || "其他"} | published=${item.published_at || "-"}`;
+    wrapper.appendChild(meta);
+
+    const summary = document.createElement("p");
+    summary.className = "evidence-item-summary";
+    summary.textContent = item.summary || "(无摘要)";
+    wrapper.appendChild(summary);
+
+    if (item.url) {
+      const link = document.createElement("a");
+      link.className = "evidence-item-url";
+      link.href = item.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = item.url;
+      wrapper.appendChild(link);
+    }
+
+    evidenceListEl.appendChild(wrapper);
+  }
+}
+
+function applyEvidencePack(pack, logTimeline = true) {
+  currentEvidencePack = pack;
+  evidencePackSignature = currentRequestSignature();
+  const confirmedText = pack.confirmed ? "已确认，可启动分析" : "未确认，请先勾选并确认";
+  evidenceStateEl.textContent = `证据包 ${pack.pack_id.slice(0, 8)} | ${confirmedText}`;
+  updateEvidenceSummaryView(pack);
+  renderEvidenceList(pack);
+  if (logTimeline) {
+    addTimeline(`证据包已更新: ${pack.pack_id.slice(0, 8)}，条目 ${pack.summary?.total_items ?? 0}，已选 ${pack.summary?.selected_items ?? 0}`);
+  }
+  setControlStates();
+}
+
+function invalidateEvidenceIfInputsChanged() {
+  if (!currentEvidencePack) return;
+  if (currentRunId) return;
+  if (evidencePackSignature !== currentRequestSignature()) {
+    resetEvidenceUI();
+    setStatus("输入参数已变化，请重新点击“获取外部资料”。");
+  }
 }
 
 function updateReportField(field, content, append = false) {
@@ -248,6 +454,7 @@ function connectEvents(runId) {
       `technical_indicators: ${vendors.technical_indicators || "-"}`,
       `fundamental_data: ${vendors.fundamental_data || "-"}`,
       `news_data: ${vendors.news_data || "-"}`,
+      `prepared_items: ${data.prepared_items_count ?? 0}`,
     ].join("\n");
 
     runtimeModelEl.textContent = [
@@ -272,7 +479,7 @@ function connectEvents(runId) {
     decisionBox.className = `decision-box ${decision}`;
 
     finalDecisionMetaEl.textContent =
-      `决策日期: ${data.trade_date}\n市场: ${data.market || "AUTO"}\n标的: ${data.ticker}\n结论: ${decisionMap[decision] || "未知"}`;
+      `决策日期: ${data.trade_date}\n市场: ${data.market || "AUTO"}\n标的: ${data.ticker}\n结论: ${decisionMap[decision] || "未知"}\n证据包: ${data.evidence_pack_id || "-"}`;
 
     const getSnippet = (field, title) => {
       const text = (moduleContent.get(field) || "").trim();
@@ -304,7 +511,6 @@ function connectEvents(runId) {
       downloadLinkEl.href = data.download_path;
       downloadLinkEl.style.display = "inline-block";
     }
-    cancelBtn.disabled = true;
   });
 
   eventSource.addEventListener("cancelled", (event) => {
@@ -315,7 +521,6 @@ function connectEvents(runId) {
     setModuleState("final_decision", "已取消", false);
     addTimeline("任务已取消。");
     setStatus("任务已取消。");
-    cancelBtn.disabled = true;
   });
 
   eventSource.addEventListener("error", (event) => {
@@ -327,7 +532,6 @@ function connectEvents(runId) {
     setModuleState("final_decision", "失败", false);
     addTimeline(`错误: ${data.message}`);
     setStatus("任务失败。");
-    cancelBtn.disabled = true;
   });
 
   eventSource.addEventListener("done", () => {
@@ -340,13 +544,12 @@ function connectEvents(runId) {
       }
     });
 
-    runBtn.disabled = false;
-    cancelBtn.disabled = true;
     currentRunId = null;
     if (eventSource) {
       eventSource.close();
       eventSource = null;
     }
+    setControlStates();
   });
 }
 
@@ -356,17 +559,27 @@ form.addEventListener("submit", async (event) => {
   const ticker = tickerInput.value.trim().toUpperCase();
   const market = (marketInput?.value || "AUTO").toUpperCase();
   const tradeDate = dateInput.value;
-  const researchUrls = (researchUrlsInput?.value || "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("http://") || line.startsWith("https://"));
+
   if (!ticker || !tradeDate) {
     setStatus("请填写股票代码和决策日期。");
     return;
   }
 
-  runBtn.disabled = true;
-  cancelBtn.disabled = false;
+  if (!currentEvidencePack) {
+    setStatus("请先点击“获取外部资料”。");
+    return;
+  }
+
+  if (evidencePackSignature !== currentRequestSignature()) {
+    setStatus("输入参数已变更，请重新准备证据包。");
+    return;
+  }
+
+  if (!currentEvidencePack.confirmed) {
+    setStatus("请先点击“确认资料”，再开始分析。");
+    return;
+  }
+
   resetUI();
   setStatus("正在启动任务...");
 
@@ -375,41 +588,175 @@ form.addEventListener("submit", async (event) => {
       ticker,
       market,
       trade_date: tradeDate,
-      research_urls: researchUrls,
+      research_urls: parseUrls(researchUrlsInput?.value || ""),
+      evidence_pack_id: currentEvidencePack.pack_id,
     });
     currentRunId = runId;
+    setControlStates();
     addTimeline(`任务编号: ${runId}${cached ? "（缓存）" : ""}`);
     if (cached) {
       setStatus("命中缓存，正在快速回放结果...");
     }
     connectEvents(runId);
   } catch (err) {
-    runBtn.disabled = false;
-    cancelBtn.disabled = true;
     decisionBox.textContent = "错误";
     decisionBox.className = "decision-box SELL";
     finalDecisionMetaEl.textContent = String(err);
     setStatus("任务启动失败。");
+    currentRunId = null;
+    setControlStates();
   }
 });
 
-cancelBtn.addEventListener("click", async () => {
-  if (!currentRunId) {
-    return;
-  }
-  cancelBtn.disabled = true;
-  setStatus("正在发送取消请求...");
-  try {
-    const result = await cancelRun(currentRunId);
-    addTimeline(result.message || "已发送取消请求。");
-  } catch (err) {
-    addTimeline(String(err));
-    setStatus("取消请求失败。");
-    cancelBtn.disabled = false;
-  }
-});
+if (prepareBtn) {
+  prepareBtn.addEventListener("click", async () => {
+    const ticker = tickerInput.value.trim().toUpperCase();
+    const market = (marketInput?.value || "AUTO").toUpperCase();
+    const tradeDate = dateInput.value;
+    const researchUrls = parseUrls(researchUrlsInput?.value || "");
+
+    if (!ticker || !tradeDate) {
+      setStatus("请先填写股票代码和决策日期。");
+      return;
+    }
+
+    prepareBtn.disabled = true;
+    setStatus("正在抓取外部资料并构建证据包...");
+
+    try {
+      const pack = await prepareEvidence({
+        ticker,
+        market,
+        trade_date: tradeDate,
+        research_urls: researchUrls,
+      });
+      applyEvidencePack(pack, true);
+      setStatus("证据包已准备，请检查条目并确认资料。");
+    } catch (err) {
+      setStatus(`证据包准备失败: ${String(err)}`);
+      addTimeline(`证据包准备失败: ${String(err)}`);
+    } finally {
+      if (!currentRunId) {
+        prepareBtn.disabled = false;
+      }
+      setControlStates();
+    }
+  });
+}
+
+if (confirmEvidenceBtn) {
+  confirmEvidenceBtn.addEventListener("click", async () => {
+    if (!currentEvidencePack) {
+      setStatus("请先准备证据包。");
+      return;
+    }
+    confirmEvidenceBtn.disabled = true;
+    setStatus("正在确认资料...");
+    try {
+      await confirmEvidence(currentEvidencePack.pack_id);
+      const refreshed = await fetchEvidence(currentEvidencePack.pack_id);
+      applyEvidencePack(refreshed, false);
+      addTimeline("证据包已确认，可以启动分析。");
+      setStatus("证据包已确认，可以开始分析。");
+    } catch (err) {
+      setStatus(`确认失败: ${String(err)}`);
+      addTimeline(`证据包确认失败: ${String(err)}`);
+    } finally {
+      setControlStates();
+    }
+  });
+}
+
+if (addEvidenceUrlsBtn) {
+  addEvidenceUrlsBtn.addEventListener("click", async () => {
+    if (!currentEvidencePack) {
+      setStatus("请先准备证据包。");
+      return;
+    }
+    const urls = parseUrls(evidenceExtraUrlsInput?.value || "");
+    if (!urls.length) {
+      setStatus("请先输入要追加的 URL（每行一个）。");
+      return;
+    }
+
+    addEvidenceUrlsBtn.disabled = true;
+    setStatus("正在追加 URL 到证据包...");
+    try {
+      const res = await addEvidenceUrls(currentEvidencePack.pack_id, urls);
+      const refreshed = await fetchEvidence(currentEvidencePack.pack_id);
+      applyEvidencePack(refreshed, false);
+      evidenceExtraUrlsInput.value = "";
+      addTimeline(`已追加 URL ${res.added ?? 0} 条。`);
+      setStatus("URL 已加入证据包（已解除确认，请重新确认）。");
+    } catch (err) {
+      setStatus(`URL 追加失败: ${String(err)}`);
+      addTimeline(`URL 追加失败: ${String(err)}`);
+    } finally {
+      setControlStates();
+    }
+  });
+}
+
+if (uploadEvidenceBtn) {
+  uploadEvidenceBtn.addEventListener("click", async () => {
+    if (!currentEvidencePack) {
+      setStatus("请先准备证据包。");
+      return;
+    }
+    const files = Array.from(evidenceFileInput?.files || []);
+    if (!files.length) {
+      setStatus("请先选择要上传的文件。");
+      return;
+    }
+
+    uploadEvidenceBtn.disabled = true;
+    setStatus(`正在上传 ${files.length} 个文件...`);
+
+    let okCount = 0;
+    for (const file of files) {
+      try {
+        await uploadEvidenceFile(currentEvidencePack.pack_id, file);
+        okCount += 1;
+      } catch (err) {
+        addTimeline(`文件上传失败 ${file.name}: ${String(err)}`);
+      }
+    }
+
+    try {
+      const refreshed = await fetchEvidence(currentEvidencePack.pack_id);
+      applyEvidencePack(refreshed, false);
+    } catch (err) {
+      addTimeline(`刷新证据包失败: ${String(err)}`);
+    }
+
+    evidenceFileInput.value = "";
+    setStatus(`文件上传完成：成功 ${okCount}/${files.length}（已解除确认，请重新确认）。`);
+    addTimeline(`文件上传完成：成功 ${okCount}/${files.length}`);
+    setControlStates();
+  });
+}
+
+if (cancelBtn) {
+  cancelBtn.addEventListener("click", async () => {
+    if (!currentRunId) {
+      return;
+    }
+    cancelBtn.disabled = true;
+    setStatus("正在发送取消请求...");
+    try {
+      const result = await cancelRun(currentRunId);
+      addTimeline(result.message || "已发送取消请求。");
+    } catch (err) {
+      addTimeline(String(err));
+      setStatus("取消请求失败。");
+      cancelBtn.disabled = false;
+    }
+  });
+}
 
 setupTOCNavigation();
+resetEvidenceUI();
+setControlStates();
 
 if (probeBtn) {
   probeBtn.addEventListener("click", async () => {
@@ -441,10 +788,21 @@ if (probeBtn) {
         `Market: ${data.market}`,
         `Range: ${data.start_date} -> ${data.end_date}`,
         "",
+        "Price/OHLCV Sources:",
+        "",
       ];
       for (const r of data.results || []) {
         lines.push(
           `[${r.ok ? "OK" : "FAIL"}] ${r.source} | rows=${r.rows} | latency=${r.latency_ms}ms | ${r.message}`
+        );
+      }
+      lines.push("");
+      lines.push(`News Coverage Window: ${data.news_start_date || "-"} -> ${data.end_date}`);
+      lines.push("News Sources:");
+      lines.push("");
+      for (const r of data.news_results || []) {
+        lines.push(
+          `[${r.ok ? "OK" : "FAIL"}] ${r.source} | items=${r.items} | latency=${r.latency_ms}ms | ${r.message}`
         );
       }
       if (sourceProbeEl) {
@@ -465,3 +823,8 @@ if (probeBtn) {
     }
   });
 }
+
+[tickerInput, marketInput, dateInput].forEach((el) => {
+  if (!el) return;
+  el.addEventListener("change", invalidateEvidenceIfInputsChanged);
+});

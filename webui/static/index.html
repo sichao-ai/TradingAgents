@@ -42,7 +42,9 @@
               <span>研究资料 URL（可选，每行一个）</span>
               <textarea id="research-urls" name="research_urls" rows="4" placeholder="https://seekingalpha.com/article/...\nhttps://seekingalpha.com/symbol/AAPL"></textarea>
             </label>
-            <button id="run-btn" type="submit">开始分析</button>
+            <button id="prepare-btn" type="button">1. 获取外部资料</button>
+            <button id="confirm-evidence-btn" type="button" class="secondary-alt" disabled>2. 确认资料</button>
+            <button id="run-btn" type="submit" disabled>3. 开始分析</button>
             <button id="probe-btn" type="button" class="secondary-alt">检测数据源</button>
             <button id="cancel-btn" type="button" class="secondary" disabled>中断分析</button>
           </form>
@@ -58,6 +60,26 @@
               <pre id="runtime-model">等待任务启动...</pre>
             </article>
           </div>
+          <article class="runtime-card evidence-card">
+            <h3>分析前资料池（先准备，再确认，再开跑）</h3>
+            <p id="evidence-state" class="evidence-state">尚未准备证据包。</p>
+            <div class="evidence-actions">
+              <label class="evidence-upload">
+                <span>上传文件（PDF/TXT/MD/CSV）</span>
+                <input id="evidence-file" type="file" multiple />
+              </label>
+              <button id="upload-evidence-btn" type="button" class="secondary-alt" disabled>上传到当前证据包</button>
+            </div>
+            <label class="full-row">
+              <span>补充资料 URL（每行一个）</span>
+              <textarea id="evidence-extra-urls" rows="3" placeholder="https://seekingalpha.com/article/...\nhttps://www.sec.gov/..."></textarea>
+            </label>
+            <div class="evidence-actions">
+              <button id="add-evidence-urls-btn" type="button" class="secondary-alt" disabled>追加 URL 到证据包</button>
+            </div>
+            <pre id="evidence-summary">准备完成后会显示来源分层、事件类型统计与可选条目。</pre>
+            <div id="evidence-list" class="evidence-list"></div>
+          </article>
           <article class="runtime-card">
             <h3>数据源检测结果</h3>
             <pre id="source-probe">点击“检测数据源”查看各来源可用性与速度。</pre>

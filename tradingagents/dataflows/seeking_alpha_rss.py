@@ -185,6 +185,10 @@ def _format_items(
 
 
 def get_news_seeking_alpha(ticker: str, start_date: str, end_date: str) -> str:
+    cfg = get_config()
+    min_items = int(cfg.get("seeking_alpha_min_items", 2))
+    strict_coverage = bool(cfg.get("seeking_alpha_strict_coverage", True))
+
     start_dt = datetime.strptime(start_date, "%Y-%m-%d")
     end_dt = datetime.strptime(end_date, "%Y-%m-%d")
     end_dt = end_dt.replace(hour=23, minute=59, second=59)
@@ -200,6 +204,7 @@ def get_news_seeking_alpha(ticker: str, start_date: str, end_date: str) -> str:
             errors.append(f"{symbol}: {exc}")
 
     # Merge user-provided research URLs (no crawling article body).
+    user_input_count = 0
     for u in _get_user_research_urls():
         try:
             host = urlparse(u).netloc.lower()
@@ -207,6 +212,7 @@ def get_news_seeking_alpha(ticker: str, start_date: str, end_date: str) -> str:
             host = ""
         if "seekingalpha.com" not in host:
             continue
+        user_input_count += 1
         all_items.append(
             {
                 "title": "User Provided Seeking Alpha Material",
@@ -231,6 +237,21 @@ def get_news_seeking_alpha(ticker: str, start_date: str, end_date: str) -> str:
     # Score & filter
     for item in uniq_items:
         item["quality_score"] = _score_item(item, ticker, start_dt, end_dt)
+
+    feed_qualified_count = len(
+        [
+            i
+            for i in uniq_items
+            if i.get("source") == "Seeking Alpha RSS" and int(i.get("quality_score", 0)) >= 2
+        ]
+    )
+
+    if strict_coverage and feed_qualified_count < min_items and user_input_count == 0:
+        raise RuntimeError(
+            f"Seeking Alpha coverage low for {ticker}: {feed_qualified_count} qualified items "
+            f"(min={min_items}). Fallback to next news vendor."
+        )
+
     filtered = [
         i
         for i in uniq_items
@@ -246,6 +267,13 @@ def get_news_seeking_alpha(ticker: str, start_date: str, end_date: str) -> str:
     top_items = filtered[:12]
 
     result = _format_items(ticker, start_date, end_date, top_items, tag_prefix="SA")
+    header = (
+        f"# Source Tier: Opinion Layer (Seeking Alpha RSS)\n"
+        f"# Coverage qualified items: {feed_qualified_count} (threshold: {min_items})\n"
+        f"# User provided SA URLs: {user_input_count}\n"
+        f"# Fact verification required: Yes (cross-check with market/fundamentals)\n\n"
+    )
+    result = header + result
     if errors and not top_items:
         result += "\nErrors while fetching feeds:\n- " + "\n- ".join(errors)
     return result
